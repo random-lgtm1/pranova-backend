@@ -12,6 +12,20 @@ const { exec } = require('child_process');
 const USERS_FILE = path.join(__dirname, 'users.json');
 const CHATS_FILE = path.join(__dirname, 'chats.json');
 
+// Helper to get Python executable path (venv vs system)
+function getPythonExecutable() {
+    const venvPath = path.join(__dirname, 'venv');
+    if (fsSync.existsSync(venvPath)) {
+        const binPath = process.platform === 'win32'
+            ? path.join(venvPath, 'Scripts', 'python.exe')
+            : path.join(venvPath, 'bin', 'python');
+        if (fsSync.existsSync(binPath)) {
+            return `"${binPath}"`;
+        }
+    }
+    return 'python'; // Fallback to system python
+}
+
 // Helper to load users from file synchronously at startup
 function loadUsers() {
     try {
@@ -319,7 +333,7 @@ function queryMemory(email, queryText) {
     return new Promise((resolve) => {
         const safeEmail = email.replace(/["']/g, '');
         const safeQuery = queryText.replace(/["'\n\r]/g, ' ');
-        exec(`python memory.py query "${safeEmail}" "${safeQuery}"`, (error, stdout, stderr) => {
+        exec(`${getPythonExecutable()} memory.py query "${safeEmail}" "${safeQuery}"`, (error, stdout, stderr) => {
             if (error) {
                 console.error("Error querying memory:", error);
                 return resolve([]);
@@ -340,7 +354,7 @@ function queryMemory(email, queryText) {
 function addMemory(email, fact) {
     const safeEmail = email.replace(/["']/g, '');
     const safeFact = fact.replace(/["'\n\r]/g, ' ');
-    exec(`python memory.py add "${safeEmail}" "${safeFact}"`, (error, stdout, stderr) => {
+    exec(`${getPythonExecutable()} memory.py add "${safeEmail}" "${safeFact}"`, (error, stdout, stderr) => {
         if (error) {
             console.error("Error adding fact to memory:", error);
         } else {
@@ -979,7 +993,7 @@ app.post('/api/generate-image', async (req, res) => {
 
         console.log(`Running Python Flux generator for prompt: "${safePrompt}"`);
 
-        exec(`python generate_flux.py --prompt "${safePrompt}" --output "${outputPath}"`, async (error, stdout, stderr) => {
+        exec(`${getPythonExecutable()} generate_flux.py --prompt "${safePrompt}" --output "${outputPath}"`, async (error, stdout, stderr) => {
             if (error) {
                 console.error("Flux Generation Script Error:", error, stderr);
                 return res.status(500).json({
