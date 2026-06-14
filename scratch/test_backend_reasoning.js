@@ -1,7 +1,7 @@
 async function test() {
     try {
         console.log("Querying local chat API with nvidia/nemotron-3-super-120b-a12b:free...");
-        const response = await fetch("https://pranova-api.onrender.com/api/chat", {
+        const response = await fetch("http://127.0.0.1:3000/api/chat", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"

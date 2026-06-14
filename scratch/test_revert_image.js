@@ -1,7 +1,7 @@
 async function test() {
     try {
         console.log("Querying reverted image generation API...");
-        const response = await fetch("https://pranova-api.onrender.com/api/generate-image", {
+        const response = await fetch("http://127.0.0.1:3000/api/generate-image", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
