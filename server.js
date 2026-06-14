@@ -12,19 +12,6 @@ const { exec } = require('child_process');
 const USERS_FILE = path.join(__dirname, 'users.json');
 const CHATS_FILE = path.join(__dirname, 'chats.json');
 
-// Helper to get Python executable path (venv vs system)
-function getPythonExecutable() {
-    const venvPath = path.join(__dirname, 'venv');
-    if (fsSync.existsSync(venvPath)) {
-        const binPath = process.platform === 'win32'
-            ? path.join(venvPath, 'Scripts', 'python.exe')
-            : path.join(venvPath, 'bin', 'python');
-        if (fsSync.existsSync(binPath)) {
-            return `"${binPath}"`;
-        }
-    }
-    return 'python'; // Fallback to system python
-}
 
 // Helper to load users from file synchronously at startup
 function loadUsers() {
@@ -333,7 +320,7 @@ function queryMemory(email, queryText) {
     return new Promise((resolve) => {
         const safeEmail = email.replace(/["']/g, '');
         const safeQuery = queryText.replace(/["'\n\r]/g, ' ');
-        exec(`${getPythonExecutable()} memory.py query "${safeEmail}" "${safeQuery}"`, (error, stdout, stderr) => {
+        exec(`python memory.py query "${safeEmail}" "${safeQuery}"`, (error, stdout, stderr) => {
             if (error) {
                 console.error("Error querying memory:", error);
                 return resolve([]);
@@ -354,7 +341,7 @@ function queryMemory(email, queryText) {
 function addMemory(email, fact) {
     const safeEmail = email.replace(/["']/g, '');
     const safeFact = fact.replace(/["'\n\r]/g, ' ');
-    exec(`${getPythonExecutable()} memory.py add "${safeEmail}" "${safeFact}"`, (error, stdout, stderr) => {
+    exec(`python memory.py add "${safeEmail}" "${safeFact}"`, (error, stdout, stderr) => {
         if (error) {
             console.error("Error adding fact to memory:", error);
         } else {
@@ -610,11 +597,10 @@ Rules:
             }
         }
 
-        // ☁️ UNIFIED CLOUD PIPELINE (Gemini Priority with OpenRouter Failover)
-        if (!isLocalModel) {
-            console.log(`📡 Unified Cloud Pipeline started for: ${model}`);
+        // 🔥 NATIVE GOOGLE CLOUD SDK STREAM ROUTE
+        if (isCloudModel) {
+            console.log(`📡 Routing to Google Cloud: ${model}`);
 
-            const geminiModel = model.includes('gemini') ? model : 'gemini-2.5-flash';
             const slicedHistory = (history || []).slice(-6);
             const contents = slicedHistory.map(msg => ({
                 role: msg.role === 'ai' ? 'model' : 'user',
@@ -626,6 +612,7 @@ Rules:
             }
             contents.push({ role: 'user', parts: [{ text: message }] });
 
+            // DYNAMIC CONFIGURATION TO PREVENT GOOGLE 400 ERRORS
             let configPayload = {
                 systemInstruction: systemPrompt
             };
@@ -634,200 +621,191 @@ Rules:
                 configPayload.tools = [{ googleSearch: {} }];
             }
 
-            if (geminiModel.includes('2.5-pro') || geminiModel.includes('thinking')) {
+            // ONLY apply "thinking" parameters if the model actually supports them
+            if (model.includes('2.5-pro') || model.includes('thinking')) {
                 configPayload.thinkingConfig = { thinkingLevel: "high" };
             }
 
             let responseStream;
-            let geminiSucceeded = false;
-
-            if (process.env.API_TOKEN) {
-                try {
-                    console.log(`📡 Attempting Gemini primary: ${geminiModel}`);
-                    try {
-                        responseStream = await googleClient.models.generateContentStream({
-                            model: geminiModel,
-                            contents: contents,
-                            config: configPayload
-                        });
-                    } catch (googleErr) {
-                        const is503 = googleErr.status === 503 || (googleErr.message && googleErr.message.includes('503'));
-                        if (is503 && geminiModel !== 'gemini-2.5-flash') {
-                            console.log(`⚠️ Google Cloud 503 for ${geminiModel}. Retrying with gemini-2.5-flash...`);
-                            res.write("\n\n*[System note: Gemini is experiencing high demand (503). Retrying with Gemini 2.5 Flash fallback...]*\n\n");
-                            responseStream = await googleClient.models.generateContentStream({
-                                model: 'gemini-2.5-flash',
-                                contents: contents,
-                                config: configPayload
-                            });
-                        } else {
-                            throw googleErr;
-                        }
-                    }
-
-                    for await (const chunk of responseStream) {
-                        if (chunk.text) {
-                            res.write(chunk.text);
-                        }
-                    }
-                    res.end();
-                    if (normalizedEmail) {
-                        extractAndStoreFacts(normalizedEmail, message, geminiModel);
-                    }
-                    geminiSucceeded = true;
-                    return;
-                } catch (geminiErr) {
-                    console.warn(`⚠️ Gemini primary pipeline failed: ${geminiErr.message || geminiErr}`);
-                }
-            } else {
-                console.warn("⚠️ Gemini API_TOKEN not configured. Skipping Gemini attempt.");
-            }
-
-            // Fallback to OpenRouter
-            if (!geminiSucceeded) {
-                console.log(`📡 Falling back to OpenRouter pipeline`);
-                res.write("\n\n*[System note: Redirecting request to OpenRouter backup pipeline...]*\n\n");
-
-                const openRouterModel = model.includes('gemini') ? 'meta-llama/llama-3.3-70b-instruct:free' : model;
-                const formattedHistory = slicedHistory.map(msg => {
-                    const item = {
-                        role: msg.role === 'ai' ? 'assistant' : 'user',
-                        content: msg.content
-                    };
-                    if (msg.reasoning_details) {
-                        item.reasoning_details = msg.reasoning_details;
-                    }
-                    return item;
+            try {
+                responseStream = await googleClient.models.generateContentStream({
+                    model: model,
+                    contents: contents,
+                    config: configPayload
                 });
+            } catch (googleErr) {
+                // If it's a 503 overload/high demand error, fallback to a reliable model
+                if (googleErr.status === 503 || (googleErr.message && googleErr.message.includes('503'))) {
+                    console.log(`⚠️ Google Cloud 503 High Demand Error for ${model}. Falling back to gemini-2.5-flash...`);
 
-                if (formattedHistory.length > 0 && formattedHistory[formattedHistory.length - 1].content === message) {
-                    formattedHistory.pop();
+                    // Let the user know via the chat interface
+                    res.write("\n\n*[System note: The requested model is currently experiencing high demand (503). Automatically rerouting to Gemini 2.5 Flash fallback...]*\n\n");
+
+                    responseStream = await googleClient.models.generateContentStream({
+                        model: 'gemini-2.5-flash',
+                        contents: contents,
+                        config: configPayload
+                    });
+                } else {
+                    throw googleErr; // Re-throw if it's a different error
                 }
-
-                const supportsReasoning = openRouterModel.includes('gpt-oss') || 
-                                           openRouterModel.includes('reasoning') || 
-                                           openRouterModel.includes('o1') || 
-                                           openRouterModel.includes('o3') || 
-                                           openRouterModel.includes('deepseek-r1') || 
-                                           openRouterModel.includes('nemotron-3.5-content-safety') || 
-                                           openRouterModel.includes('nemotron-3-super-120b-a12b');
-
-                const params = {
-                    model: openRouterModel,
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        ...formattedHistory,
-                        { role: "user", content: message }
-                    ],
-                    stream: true
-                };
-
-                if (supportsReasoning) {
-                    params.reasoning = { enabled: true };
-                }
-
-                const clients = [openRouterClient, openRouterClient2, openRouterClient3];
-                let stream;
-                let lastError;
-
-                for (let attempt = 0; attempt < clients.length; attempt++) {
-                    const i = (openRouterKeyIndex + attempt) % clients.length;
-                    try {
-                        stream = await clients[i].chat.completions.create(params);
-                        openRouterKeyIndex = i;
-                        break;
-                    } catch (err) {
-                        lastError = err;
-                        const isLimitExceededError = err.status === 429 || err.status === 402 || 
-                                                     (err.message && (
-                                                         err.message.toLowerCase().includes('limit') || 
-                                                         err.message.toLowerCase().includes('credit') ||
-                                                         err.message.toLowerCase().includes('balance') ||
-                                                         err.message.toLowerCase().includes('rate') ||
-                                                         err.message.toLowerCase().includes('quota') ||
-                                                         err.message.toLowerCase().includes('insufficient')
-                                                     ));
-                        if (isLimitExceededError && attempt < clients.length - 1) {
-                            const nextIdx = (i + 1) % clients.length;
-                            console.warn(`⚠️ OpenRouter API Key ${i + 1} limit exceeded: ${err.message}. Failover to Key ${nextIdx + 1}...`);
-                            res.write(`\n\n*[System note: OpenRouter API key ${i + 1} limit exceeded. Switching to Backup API Key ${nextIdx + 1}...]*\n\n`);
-                        } else {
-                            throw err;
-                        }
-                    }
-                }
-
-                if (!stream) {
-                    throw lastError || new Error("All OpenRouter API keys failed.");
-                }
-
-                let reasoningText = "";
-                let reasoningDetails = [];
-                let contentText = "";
-                let startedContent = false;
-
-                for await (const chunk of stream) {
-                    const delta = chunk.choices[0]?.delta;
-                    if (!delta) continue;
-
-                    if (delta.reasoning_details) {
-                        for (const r of delta.reasoning_details) {
-                            reasoningDetails.push(r);
-                        }
-                    }
-
-                    const rText = delta.reasoning || "";
-                    if (rText) {
-                        if (reasoningText === "") {
-                            res.write("<think>\n");
-                        }
-                        reasoningText += rText;
-                        res.write(rText);
-                    }
-
-                    const cText = delta.content || "";
-                    if (cText) {
-                        if (reasoningText !== "" && !startedContent) {
-                            res.write("\n</think>\n");
-                            startedContent = true;
-                        }
-                        contentText += cText;
-                        res.write(cText);
-                    }
-                }
-
-                if (reasoningText !== "" && !startedContent) {
-                    res.write("\n</think>\n");
-                }
-
-                if (reasoningDetails.length > 0) {
-                    const mergedReasoningDetails = [];
-                    for (const r of reasoningDetails) {
-                        let existing = mergedReasoningDetails.find(item => item.type === r.type && item.index === r.index);
-                        if (existing) {
-                            existing.text += (r.text || "");
-                        } else {
-                            mergedReasoningDetails.push({
-                                type: r.type,
-                                text: r.text || "",
-                                format: r.format || "unknown",
-                                index: r.index ?? 0
-                            });
-                        }
-                    }
-
-                    const metadata = {
-                        reasoning_details: mergedReasoningDetails
-                    };
-                    res.write(`\n<!-- METADATA: ${JSON.stringify(metadata)} -->`);
-                }
-
-                res.end();
-                if (normalizedEmail) {
-                    extractAndStoreFacts(normalizedEmail, message, openRouterModel);
-                }
-                return;
             }
+
+            for await (const chunk of responseStream) {
+                if (chunk.text) {
+                    res.write(chunk.text);
+                }
+            }
+            res.end();
+            if (normalizedEmail) {
+                extractAndStoreFacts(normalizedEmail, message, model);
+            }
+            return;
+        }
+
+        // 🌐 NATIVE OPENROUTER CLOUD STREAM ROUTE
+        const isOpenRouterModel = model.startsWith('qwen/') || model.startsWith('openai/') || model.startsWith('meta-llama/') || model.startsWith('nvidia/') || model.includes('openrouter');
+        if (isOpenRouterModel) {
+            console.log(`📡 Routing to OpenRouter Cloud: ${model}`);
+
+            const slicedHistory = (history || []).slice(-6);
+            const formattedHistory = slicedHistory.map(msg => {
+                const item = {
+                    role: msg.role === 'ai' ? 'assistant' : 'user',
+                    content: msg.content
+                };
+                if (msg.reasoning_details) {
+                    item.reasoning_details = msg.reasoning_details;
+                }
+                return item;
+            });
+
+            if (formattedHistory.length > 0 && formattedHistory[formattedHistory.length - 1].content === message) {
+                formattedHistory.pop();
+            }
+
+            const supportsReasoning = model.includes('gpt-oss') || model.includes('reasoning') || model.includes('o1') || model.includes('o3') || model.includes('deepseek-r1') || model.includes('nemotron-3.5-content-safety') || model.includes('nemotron-3-super-120b-a12b');
+
+            const params = {
+                model: model,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    ...formattedHistory,
+                    { role: "user", content: message }
+                ],
+                stream: true
+            };
+
+            if (supportsReasoning) {
+                params.reasoning = { enabled: true };
+            }
+
+            const clients = [openRouterClient, openRouterClient2, openRouterClient3];
+            let stream;
+            let lastError;
+
+            for (let attempt = 0; attempt < clients.length; attempt++) {
+                const i = (openRouterKeyIndex + attempt) % clients.length;
+                try {
+                    stream = await clients[i].chat.completions.create(params);
+                    openRouterKeyIndex = i; // Save the working key index
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    const isLimitExceededError = err.status === 429 || err.status === 402 || 
+                                                 (err.message && (
+                                                     err.message.toLowerCase().includes('limit') || 
+                                                     err.message.toLowerCase().includes('credit') ||
+                                                     err.message.toLowerCase().includes('balance') ||
+                                                     err.message.toLowerCase().includes('rate') ||
+                                                     err.message.toLowerCase().includes('quota') ||
+                                                     err.message.toLowerCase().includes('insufficient')
+                                                 ));
+                    if (isLimitExceededError && attempt < clients.length - 1) {
+                        const nextIdx = (i + 1) % clients.length;
+                        console.warn(`⚠️ OpenRouter API Key ${i + 1} limit exceeded: ${err.message}. Failover to Key ${nextIdx + 1}...`);
+                        res.write(`\n\n*[System note: API key ${i + 1} quota exceeded. Automatically switching to Backup API Key ${nextIdx + 1}...]*\n\n`);
+                    } else {
+                        throw err;
+                    }
+                }
+            }
+            if (!stream) {
+                throw lastError || new Error("All OpenRouter API keys failed.");
+            }
+
+            let reasoningText = "";
+            let reasoningDetails = [];
+            let contentText = "";
+            let startedContent = false;
+
+            for await (const chunk of stream) {
+                const delta = chunk.choices[0]?.delta;
+                if (!delta) continue;
+
+                // Extract reasoning details
+                if (delta.reasoning_details) {
+                    for (const r of delta.reasoning_details) {
+                        reasoningDetails.push(r);
+                    }
+                }
+
+                // Extract reasoning text
+                const rText = delta.reasoning || "";
+                if (rText) {
+                    if (reasoningText === "") {
+                        res.write("<think>\n");
+                    }
+                    reasoningText += rText;
+                    res.write(rText);
+                }
+
+                // Extract content text
+                const cText = delta.content || "";
+                if (cText) {
+                    if (reasoningText !== "" && !startedContent) {
+                        res.write("\n</think>\n");
+                        startedContent = true;
+                    }
+                    contentText += cText;
+                    res.write(cText);
+                }
+            }
+
+            // Close think tag if reasoning finished but content never started
+            if (reasoningText !== "" && !startedContent) {
+                res.write("\n</think>\n");
+            }
+
+            // Append metadata if reasoning details are collected
+            if (reasoningDetails.length > 0) {
+                // Merge streaming reasoning details into a combined array by index/type
+                const mergedReasoningDetails = [];
+                for (const r of reasoningDetails) {
+                    let existing = mergedReasoningDetails.find(item => item.type === r.type && item.index === r.index);
+                    if (existing) {
+                        existing.text += (r.text || "");
+                    } else {
+                        mergedReasoningDetails.push({
+                            type: r.type,
+                            text: r.text || "",
+                            format: r.format || "unknown",
+                            index: r.index ?? 0
+                        });
+                    }
+                }
+
+                const metadata = {
+                    reasoning_details: mergedReasoningDetails
+                };
+                res.write(`\n<!-- METADATA: ${JSON.stringify(metadata)} -->`);
+            }
+
+            res.end();
+            if (normalizedEmail) {
+                extractAndStoreFacts(normalizedEmail, message, model);
+            }
+            return;
         }
 
         // 💻 STANDARD OLLAMA COMPUTE PIPELINE
@@ -993,7 +971,7 @@ app.post('/api/generate-image', async (req, res) => {
 
         console.log(`Running Python Flux generator for prompt: "${safePrompt}"`);
 
-        exec(`${getPythonExecutable()} generate_flux.py --prompt "${safePrompt}" --output "${outputPath}"`, async (error, stdout, stderr) => {
+        exec(`python generate_flux.py --prompt "${safePrompt}" --output "${outputPath}"`, async (error, stdout, stderr) => {
             if (error) {
                 console.error("Flux Generation Script Error:", error, stderr);
                 return res.status(500).json({

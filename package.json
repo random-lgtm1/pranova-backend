@@ -1,8 +1,4 @@
 {
-  "scripts": {
-    "postinstall": "node install_deps.js",
-    "start": "node server.js"
-  },
   "dependencies": {
     "@google/genai": "^2.8.0",
     "cors": "^2.8.6",
