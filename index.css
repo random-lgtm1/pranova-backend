@@ -1,0 +1,56 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  /* Using a slightly darker background for the main content area 
+     so the #121212 sidebar blends naturally into a dark interface */
+  background-color: #000000;
+  min-height: 100vh;
+  display: flex;
+  font-family: sans-serif;
+}
+
+/* Sidebar Container */
+.sidebar {
+  width: 64px;
+  height: 100vh;
+  background-color: #000000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 32px;
+  /* Top spacing */
+  gap: 32px;
+  /* Exactly 32px between each icon wrapper */
+}
+
+/* Icon Wrapper */
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 24px icon + 10px padding on each side = 44px */
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: #A0A0A0;
+  text-decoration: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Ensure SVG renders pixel-perfectly without extra spacing */
+.sidebar-item svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+/* Hover and Active States */
+.sidebar-item:hover,
+.sidebar-item.active {
+  color: #FFFFFF;
+  background-color: #171717;
+}
