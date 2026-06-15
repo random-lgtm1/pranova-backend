@@ -7,7 +7,41 @@ const google = require('googlethis');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
+
+// Ensure Python dependencies are installed at startup (self-healing mechanism)
+try {
+    console.log("🔍 Checking Python environment and dependencies...");
+    try {
+        // Test if all required dependencies can be imported
+        execSync('python -c "import requests, dotenv, chromadb, huggingface_hub"', { stdio: 'ignore' });
+        console.log("✅ All Python dependencies are already installed.");
+    } catch (importErr) {
+        console.log("⚠️ Some Python dependencies are missing. Installing via pip...");
+        try {
+            // Try standard pip install
+            execSync('pip install -r requirements.txt', { stdio: 'inherit' });
+            console.log("✅ Python dependencies installed successfully using pip.");
+        } catch (pipErr) {
+            try {
+                // Try python -m pip install
+                execSync('python -m pip install -r requirements.txt', { stdio: 'inherit' });
+                console.log("✅ Python dependencies installed successfully using python -m pip.");
+            } catch (pip2Err) {
+                try {
+                    // Try pip install --user as a fallback
+                    execSync('pip install --user -r requirements.txt', { stdio: 'inherit' });
+                    console.log("✅ Python dependencies installed successfully using pip install --user.");
+                } catch (pip3Err) {
+                    console.error("❌ All pip installation attempts failed. Image generation might fail.");
+                    console.error(pip3Err.message);
+                }
+            }
+        }
+    }
+} catch (err) {
+    console.warn("⚠️ Warning: Failed to check/install Python dependencies at startup:", err.message);
+}
 
 const USERS_FILE = path.join(__dirname, 'users.json');
 const CHATS_FILE = path.join(__dirname, 'chats.json');

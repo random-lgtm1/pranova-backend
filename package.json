@@ -2,7 +2,8 @@
   "name": "pranova-backend",
   "version": "1.0.0",
   "scripts": {
-    "build": "pip install -r requirements.txt",
+    "postinstall": "pip install -r requirements.txt || python -m pip install -r requirements.txt || echo 'Python dependencies installation skipped'",
+    "build": "pip install -r requirements.txt || python -m pip install -r requirements.txt || echo 'Python dependencies installation skipped'",
     "start": "node server.js"
   },
   "dependencies": {
