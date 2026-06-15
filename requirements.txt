@@ -1,0 +1,4 @@
+requests
+python-dotenv
+chromadb
+huggingface_hub

@@ -1,4 +1,10 @@
 {
+  "name": "pranova-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "pip install -r requirements.txt",
+    "start": "node server.js"
+  },
   "dependencies": {
     "@google/genai": "^2.8.0",
     "cors": "^2.8.6",

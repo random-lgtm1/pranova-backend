@@ -3799,16 +3799,7 @@
                     <span class="slider"></span>
                 </label>
             </div>
-            <div class="setting-row">
-                <div class="setting-info">
-                    <div class="setting-title">Image Generation Model</div>
-                    <div class="setting-desc">Choose model for generating images</div>
-                </div>
-                <select id="imageModelSelector"
-                    style="background: var(--bg); color: var(--t1); border: 1px solid var(--brd); padding: 8px 12px; border-radius: 8px; cursor: pointer; outline: none; font-size: 14px; font-family: inherit;">
-                    <option value="black-forest-labs/FLUX.1-schnell">Flux.1 Schnell (Hugging Face API / Local)</option>
-                </select>
-            </div>
+
             <div class="setting-row">
                 <div class="setting-info">
                     <div class="setting-title">Clear Chat History</div>
@@ -3886,7 +3877,7 @@
             if (s) s.style.display = 'none';
         });
         function executePranovaLogic() {
-            let BACKEND_URL = "http://127.0.0.1:3000";
+            let BACKEND_URL = "https://pranova-backend.onrender.com";
             const metadataPattern1 = new RegExp("\\n<" + "!-- METADATA: \\{.*?\\} -->$");
             const metadataPattern2 = new RegExp("\\n<" + "!-- METADATA: \\{.*?$");
             const cleanMetadataPattern = new RegExp("\\n<" + "!-- METADATA: (\\{.*?\\}) -->$");
@@ -4263,15 +4254,7 @@
             } catch (e) { }
             /* ═══ IMAGE MODEL SELECTION LOAD ═══ */
             try {
-                const imgModelSelector = document.getElementById('imageModelSelector');
-                const savedImageModel = localStorage.getItem('pa_image_model') || 'black-forest-labs/FLUX.1-schnell';
-                if (imgModelSelector) {
-                    imgModelSelector.value = savedImageModel;
-                    imgModelSelector.addEventListener('change', (e) => {
-                        localStorage.setItem('pa_image_model', e.target.value);
-                        toast(`Image model set to: ${e.target.options[e.target.selectedIndex].text}`, 'sync');
-                    });
-                }
+                localStorage.setItem('pa_image_model', 'black-forest-labs/FLUX.1-schnell');
             } catch (e) { }
             /* ═══ DYNAMIC GREETING (UPDATED FOR GEMINI STYLE) ═══ */
             function updateDynamicGreeting() {
@@ -4955,7 +4938,7 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 prompt: text,
-                                model: localStorage.getItem('pa_image_model') || 'black-forest-labs/FLUX.1-schnell'
+                                model: 'black-forest-labs/FLUX.1-schnell'
                             }),
                             signal: activeAbortController.signal
                         });
