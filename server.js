@@ -14,7 +14,7 @@ try {
     console.log("🔍 Checking Python environment and dependencies...");
     try {
         // Test if all required dependencies can be imported
-        execSync('python -c "import requests, dotenv, chromadb, huggingface_hub"', { stdio: 'ignore' });
+        execSync('python -c "import chromadb, huggingface_hub"', { stdio: 'ignore' });
         console.log("✅ All Python dependencies are already installed.");
     } catch (importErr) {
         console.log("⚠️ Some Python dependencies are missing. Installing via pip...");
@@ -33,7 +33,7 @@ try {
                     execSync('pip install --user -r requirements.txt', { stdio: 'inherit' });
                     console.log("✅ Python dependencies installed successfully using pip install --user.");
                 } catch (pip3Err) {
-                    console.error("❌ All pip installation attempts failed. Image generation might fail.");
+                    console.error("❌ All pip installation attempts failed. Some secondary features (memory fallback) might be unavailable.");
                     console.error(pip3Err.message);
                 }
             }
